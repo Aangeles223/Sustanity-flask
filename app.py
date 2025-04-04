@@ -34,7 +34,7 @@ API_URL = "https://api-yovy.onrender.com/news/news/posts"  # URL de la API
 
 @app.route('/')
 def home():
-    return redirect(url_for('login'))
+    return redirect(url_for('login'))  # Redirige a la página de login
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -63,27 +63,36 @@ def create_news():
         title = request.form['title']
         description = request.form['description']
         user_id = 0  # O el ID del usuario autenticado, si es necesario
-        image = request.files['image']  # Para subir la imagen
+        image = request.files.get('image')  # Usamos `get` para evitar el BadRequestKeyError
 
-        # Crear noticia en la API (POST a FastAPI)
-        files = {'image': image}  # Enviar imagen
-        data = {
-            "user_id": user_id,
-            "title": title,
-            "description": description
-        }
+        if image:
+            # Crear noticia en la API (POST a FastAPI)
+            data = {
+                "user_id": user_id,
+                "title": title,
+                "description": description
+            }
 
-        try:
-            response = requests.post(f"{API_URL}", json=data, files=files)
-            if response.status_code == 201:
-                flash("News created successfully!", 'success')
-                return redirect(url_for('view_posts'))  # Redirige a la lista de posts
-            else:
-                flash(f"Failed to create post: {response.text}", 'danger')
-        except requests.exceptions.RequestException as e:
-            flash(f"Error connecting to API: {e}", 'danger')
+            # Asegúrate de que la imagen esté en un archivo binario
+            files = {'image': image.stream}  # Usa .stream para leer la imagen como archivo binario
+
+            try:
+                # Enviar la solicitud POST a FastAPI
+                response = requests.post(f"{API_URL}", data=data, files=files)
+                
+                if response.status_code == 201:
+                    flash("News created successfully!", 'success')
+                    return redirect(url_for('view_posts'))  # Redirige a la lista de posts
+                else:
+                    flash(f"Failed to create post: {response.text}", 'danger')
+            except requests.exceptions.RequestException as e:
+                flash(f"Error connecting to API: {e}", 'danger')
+        else:
+            flash("No image selected.", 'danger')  # Si no se seleccionó una imagen
 
     return render_template('create_news.html')
+
+
 
 @app.route('/view_posts')
 @login_required
@@ -146,6 +155,26 @@ def delete_news(post_id):
     except requests.exceptions.RequestException as e:
         flash(f"Error deleting post: {e}", 'danger')
 
+    return redirect(url_for('view_posts'))
+
+@app.route('/like_post/<int:post_id>', methods=['POST'])
+@login_required
+def like_post(post_id):
+    response = requests.post(f"{API_URL}/{post_id}/like")
+    if response.status_code == 200:
+        flash("Post liked successfully!", 'success')
+    else:
+        flash(f"Failed to like post: {response.text}", 'danger')
+    return redirect(url_for('view_posts'))
+
+@app.route('/dislike_post/<int:post_id>', methods=['POST'])
+@login_required
+def dislike_post(post_id):
+    response = requests.post(f"{API_URL}/{post_id}/dislike")
+    if response.status_code == 200:
+        flash("Post disliked successfully!", 'success')
+    else:
+        flash(f"Failed to dislike post: {response.text}", 'danger')
     return redirect(url_for('view_posts'))
 
 if __name__ == '__main__':
